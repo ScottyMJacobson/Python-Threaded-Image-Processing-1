@@ -102,7 +102,10 @@ def main(argv):
 
     image_to_transform = Image.open(image_file)
 
-    if 
+    if image_to_transform.mode is not 'RGB':
+        print>> sys.stderr, "Unkown color mode: {0}"\
+                                            .format(image_to_transform.mode)
+        exit(4)
 
     final_image = threaded_transform(image_to_transform, rows_to_use, columns_to_use, function_to_use)
 
