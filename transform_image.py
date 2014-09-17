@@ -1,7 +1,7 @@
 # Scott Jacobson
 # 9/17/14
 # COMP50 Concurrant Programming
-# 3 hours
+# 5 hours
 
 """transform_image.py, a program that takes in an image and performs 
     one of four transforms using one specified threading"""
@@ -94,13 +94,13 @@ def main(argv):
         .format(number_of_threads, MAX_THREADS)
         exit(2)
 
-    if args.transformation in transform_functions:
-        function_to_use = transform_functions[args.transformation] 
+    if args.transformation.lower() in transform_functions:
+        function_to_use = transform_functions[args.transformation.lower()] 
     else:
         print>> sys.stderr, "Unkown transform: {0}".format(args.transformation)
         exit(3)
 
-    image_to_transform = Image.open(image_file)
+    image_to_transform = Image.open(args.image_file)
 
     if image_to_transform.mode is not 'RGB':
         print>> sys.stderr, "Unkown color mode: {0}"\
