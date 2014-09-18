@@ -17,17 +17,6 @@ import random
 import threading
 from PIL import Image
 
-def paint(index):
-    #grab a pixel at random
-    #lock that pixel's assignerthing
-    #check if it's owned by anyone
-    #
-    steps_taken = 0
-    pixels_i_own = list()
-    while steps_taken < max_steps:
-        #take a step
-        steps_taken+= 1
-
 class RestrictedPixelMap:
     """A pixel map whose pixel access is regulated by a parallel map of locks"""
     def __init__(self, pix_map, (width, height)):
@@ -40,7 +29,6 @@ class RestrictedPixelMap:
         """attempts to acquire the lock for this pixel and draw to it"""
         success = False
         self.lock_map[position[0]][position[1]].acquire()
-        #acquire the lock to that pixel
         this_pixel = self.pix_map[position[0],position[1]]
         if this_pixel == (255,255,255):
             self.pix_map[position[0],position[1]] = new_pixel_color
@@ -53,10 +41,9 @@ class RestrictedPixelMap:
         blank = False
         if position[0] > 511 or position[1] > 511:
             return False
-        if position[0] < 1 or position[1] < 1:
+        if position[0] < 0 or position[1] < 0:
             return False
         self.lock_map[position[0]][position[1]].acquire()
-        #acquire the lock to that pixel
         this_pixel = self.pix_map[position[0],position[1]]
         if this_pixel == (255,255,255):
             blank = True
@@ -66,7 +53,6 @@ class RestrictedPixelMap:
     def get_color (self, position):
         """attempts to acquire the lock for this pixel and returns its color"""
         self.lock_map[position[0]][position[1]].acquire()
-        #acquire the lock to that pixel
         this_pixel = self.pix_map[position[0],position[1]]
         self.lock_map[position[0]][position[1]].release()
         return this_pixel
@@ -134,7 +120,7 @@ class Artist:
         """checks to see if a position is valid"""
         if (temp_position[0] > 511) or (temp_position[1] > 511):
             return False
-        if (temp_position[0] < 1) or (temp_position[1] < 1):
+        if (temp_position[0] < 0) or (temp_position[1] < 0):
             return False
         return self.restricted_canvas.is_blank(temp_position)
 
@@ -175,16 +161,15 @@ def generate_position(artist_list):
 def generate_color(artist_list):
     """generates a random color that is unique from the other colors,
     using a euclidean distance metric to determine uniqueness"""
-    random_color = (0, 0, 0)
+    random_color = (random.randint(0,255), random.randint(0,255),\
+                                             random.randint(0,255))
     
     def color_too_similar(random_color, artist_list, threshold):
-
         def find_euclid_distance(color_1, color_2):
             euclid_sum = 0
             for index, color_value1 in enumerate(color_1):
                 euclid_sum += ((color_value1 - color_2[index])**2)
             return euclid_sum**(0.5)
-        
         if find_euclid_distance(random_color, (255,255,255)) < threshold:
             return True # makes sure the color isnt too close to white
         for artist in artist_list:
@@ -221,6 +206,7 @@ def main():
 
     canvas = Image.new('RGB', (512,512), color=(255,255,255))
     canvas_map = canvas.load()
+    canvas.save('canvas.jpg')
     restricted_canvas = RestrictedPixelMap(canvas_map, canvas.size)
 
     artist_list = generate_artists(args.number_of_threads,args.number_of_steps)
@@ -230,7 +216,6 @@ def main():
     for artist in artist_list:
         threads_list.append(threading.Thread(target=artist.ready_set_paint,\
                                                  args=((restricted_canvas,))))
-
     for thread in threads_list:
         thread.start()
 

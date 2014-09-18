@@ -3,7 +3,8 @@
 # COMP50 Concurrant Programming
 
 """transform_image.py, a program that takes in an image and performs 
-    one of four transforms using specified threading"""
+    one of three transforms, switch-r-b, grayscale, or invert,
+    using specified threading"""
 
 # The following synchronization is required among the threads:
 # Every thread has to finish its processing before the
@@ -94,13 +95,13 @@ def main(argv):
     if args.transformation.lower() in transform_functions:
         function_to_use = transform_functions[args.transformation.lower()] 
     else:
-        print>> sys.stderr, "Unkown transform: {0}".format(args.transformation)
+        print>> sys.stderr, "Unknown transform: {0}".format(args.transformation)
         exit(3)
 
     image_to_transform = Image.open(args.image_file)
 
     if image_to_transform.mode is not 'RGB':
-        print>> sys.stderr, "Unkown color mode: {0}"\
+        print>> sys.stderr, "Unknown color mode: {0}"\
                                             .format(image_to_transform.mode)
         exit(4)
 
