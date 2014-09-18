@@ -35,38 +35,126 @@ class RestrictedPixelMap:
         self.height = height
         self.lock_map = [[threading.Lock()]*width for i in range(height)]
 
-    def draw_to_pixel (self, new_pixel, row, column):
+    def draw_to_pixel (self, new_pixel_color, position):
+        """attempts to acquire the lock for this pixel and draw to it"""
         success = False
-        self.lock_map[column][row].acquire()
+        self.lock_map[position[0]][position[1]].acquire()
         #acquire the lock to that pixel
-        this_pixel = self.pix_map[column,row]
+        this_pixel = self.pix_map[position[0],position[1]]
         if this_pixel == (255,255,255):
-            self.pix_map[column,row] = new_pixel
+            self.pix_map[position[0],position[1]] = new_pixel_color
             print "Changed"
             success = True
         else:
             print "Failed"
-        self.lock_map[row][column].release()
+        self.lock_map[position[0]][position[1]].release()
         return success
+
+    def is_blank (self, position):
+        """attempts to acquire the lock for this pixel and returns iswhite"""
+        blank = False
+        if position[0] > 511 or position[1] > 511:
+            return False
+        self.lock_map[position[0]][position[1]].acquire()
+        #acquire the lock to that pixel
+        this_pixel = self.pix_map[position[0],position[1]]
+        if this_pixel == (255,255,255):
+            blank = True
+        self.lock_map[position[0]][position[1]].release()
+        return blank
 
 class Artist:
     def __init__(self, index, color, start_position, max_steps):
         self.index=index
         self.color=color
         self.max_steps=max_steps
-        self.start_position = start_position
+        self.position = start_position
         self.steps_taken = 0
-        self.pixels_i_own = 0
+        self.pixels_i_own = list()
+        self.completely_trapped = False
 
     def ready_set_paint (self, restricted_canvas):
+        """runs the full paint process for an artist"""
+        self.restricted_canvas = restricted_canvas
         while self.steps_taken < self.max_steps:
+            if self.completely_trapped:
+                return
+            if self.restricted_canvas.draw_to_pixel(self.color, self.position):
+                self.pixels_i_own.append(self.position)
+            self.find_next_position()
             self.steps_taken += 1
 
+    def find_next_position(self):
+        """finds the next position randomly"""
+        if self.completely_trapped:
+            return
+        rolls_left = [1,2,3,4]
+        valid_position = False
+        temp_position = self.position
+        while not valid_position: 
+            dice_roll = random.choice(rolls_left)
+            print dice_roll
+            if dice_roll == 1: #North
+                temp_position = (self.position[0],self.position[1]+1)
+                valid_position = self.check_position (temp_position)
+                if not valid_position:
+                    rolls_left.remove(1)
+            elif dice_roll == 2: #East
+                temp_position = (self.position[0]+1, self.position[1])
+                valid_position = self.check_position (temp_position)
+                if not valid_position:
+                    rolls_left.remove(2)
+            elif dice_roll == 3: #South
+                temp_position = (self.position[0], self.position[1]-1)
+                valid_position = self.check_position (temp_position)
+                if not valid_position:
+                    rolls_left.remove(3)
+            elif dice_roll == 4: #West
+                temp_position = (self.position[0]-1, self.position[1])
+                valid_position = self.check_position (temp_position)
+                if not valid_position:
+                    rolls_left.remove(4)
+            if not len(rolls_left): #if we just removed the last possible roll
+                self.position = self.choose_from_owned_pixels()
+                return
+        if valid_position:
+            self.position = temp_position
+        else:
+            print>>sys.stderr, "YO THIS IS FUCKED"
+
+    def check_position (self, temp_position):
+        """checks to see if a position is valid"""
+        if self.position[0] > 511 or self.position[1] > 511:
+            return False
+        return self.restricted_canvas.is_blank(temp_position)
+
+    def choose_from_owned_pixels(self):
+        temp_position = self.position
+        while not self.has_blank_neighbor(temp_position):
+            self.pixels_i_own.remove(temp_position)
+            if not len(self.pixels_i_own):
+                self.completely_trapped = True
+                return
+            temp_position = random.choice(self.pixels_i_own)
+            
+        self.position = temp_position
+
+    def has_blank_neighbor(self, temp_position):
+        neighbors = [(self.position[0],self.position[1]+1), \
+                    (self.position[0]+1, self.position[1]),\
+                    (self.position[0], self.position[1]-1),\
+                    (self.position[0]-1, self.position[1])]
+        for temp_neighbor in neighbors:
+            if self.check_position(temp_neighbor):
+                return True
+        return False
+
+
 def generate_position(artist_list):
-    random_position = (random.randint(0,512),random.randint(0,512))
+    random_position = (random.randint(0,511),random.randint(0,511))
     attempts = 0
-    while random_position in map(lambda artist: artist.start_position, artist_list):
-        random_position = (random.randint(0,512),random.randint(0,512))
+    while random_position in map(lambda artist: artist.position, artist_list):
+        random_position = (random.randint(0,511),random.randint(0,511))
         attempts += 1
     if attempts > 1:
         print random_position, attempts
@@ -94,10 +182,8 @@ def generate_color(artist_list):
         random_color = \
         (random.randint(0,255),random.randint(0,255),random.randint(0,255))
         color_tries+= 1
-        if color_tries > 10:
+        if color_tries > 50:
             break
-
-#    print random_color, color_tries
     return random_color
 
 
@@ -107,6 +193,7 @@ def generate_artists(number_of_artists, number_of_steps):
         artist_list.append(\
                     Artist(i, generate_color(artist_list), \
                         generate_position(artist_list), number_of_steps))
+    return artist_list
 
 def main():
     parser = argparse.ArgumentParser()
@@ -121,17 +208,20 @@ def main():
 
     artist_list = generate_artists(args.number_of_threads,args.number_of_steps)
 
-    red_thread = threading.Thread(target=restricted_canvas.draw_to_pixel,\
-                                args=((255,1,1), 10, 10))
-    blue_thread = threading.Thread(target=restricted_canvas.draw_to_pixel,\
-                                args=((1,1,255), 10, 10))
+    threads_list = list()
 
-    red_thread.start()
-    blue_thread.start()
-    red_thread.join()
-    blue_thread.join()
+    for artist in artist_list:
+        threads_list.append(threading.Thread(target=artist.ready_set_paint,\
+                                                 args=((restricted_canvas,))))
+
+    for thread in threads_list:
+        thread.start()
+
+    for thread in threads_list:
+        thread.join()
 
     canvas.show()
+    canvas.save('masterpiece.jpg')
 
 if __name__ == '__main__':
     main()
