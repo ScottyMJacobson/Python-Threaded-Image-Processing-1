@@ -29,6 +29,7 @@ def paint(index):
         steps_taken+= 1
 
 class RestrictedPixelMap:
+    """A pixel map whose pixel access is regulated by a parallel map of locks"""
     def __init__(self, pix_map, (width, height)):
         self.pix_map = pix_map
         self.width = width
@@ -43,10 +44,7 @@ class RestrictedPixelMap:
         this_pixel = self.pix_map[position[0],position[1]]
         if this_pixel == (255,255,255):
             self.pix_map[position[0],position[1]] = new_pixel_color
-            print "Changed"
             success = True
-        else:
-            print "Failed"
         self.lock_map[position[0]][position[1]].release()
         return success
 
@@ -55,6 +53,8 @@ class RestrictedPixelMap:
         blank = False
         if position[0] > 511 or position[1] > 511:
             return False
+        if position[0] < 1 or position[1] < 1:
+            return False
         self.lock_map[position[0]][position[1]].acquire()
         #acquire the lock to that pixel
         this_pixel = self.pix_map[position[0],position[1]]
@@ -62,6 +62,14 @@ class RestrictedPixelMap:
             blank = True
         self.lock_map[position[0]][position[1]].release()
         return blank
+
+    def get_color (self, position):
+        """attempts to acquire the lock for this pixel and returns its color"""
+        self.lock_map[position[0]][position[1]].acquire()
+        #acquire the lock to that pixel
+        this_pixel = self.pix_map[position[0],position[1]]
+        self.lock_map[position[0]][position[1]].release()
+        return this_pixel
 
 class Artist:
     def __init__(self, index, color, start_position, max_steps):
@@ -93,7 +101,6 @@ class Artist:
         temp_position = self.position
         while not valid_position: 
             dice_roll = random.choice(rolls_left)
-            print dice_roll
             if dice_roll == 1: #North
                 temp_position = (self.position[0],self.position[1]+1)
                 valid_position = self.check_position (temp_position)
@@ -115,62 +122,71 @@ class Artist:
                 if not valid_position:
                     rolls_left.remove(4)
             if not len(rolls_left): #if we just removed the last possible roll
-                self.position = self.choose_from_owned_pixels()
+                self.choose_from_owned_pixels()
                 return
         if valid_position:
             self.position = temp_position
         else:
-            print>>sys.stderr, "YO THIS IS FUCKED"
+            print>>sys.stderr, "THIS SHOULD NEVER HAPPEN"
+            return
 
     def check_position (self, temp_position):
         """checks to see if a position is valid"""
-        if self.position[0] > 511 or self.position[1] > 511:
+        if (temp_position[0] > 511) or (temp_position[1] > 511):
+            return False
+        if (temp_position[0] < 1) or (temp_position[1] < 1):
             return False
         return self.restricted_canvas.is_blank(temp_position)
 
     def choose_from_owned_pixels(self):
+        """attempts to choose the next position from the owned pixel list,
+        if it fails, it tells the class that it is trapped"""
         temp_position = self.position
         while not self.has_blank_neighbor(temp_position):
-            self.pixels_i_own.remove(temp_position)
+            if temp_position in self.pixels_i_own:
+                self.pixels_i_own.remove(temp_position)
             if not len(self.pixels_i_own):
                 self.completely_trapped = True
                 return
             temp_position = random.choice(self.pixels_i_own)
-            
         self.position = temp_position
 
     def has_blank_neighbor(self, temp_position):
-        neighbors = [(self.position[0],self.position[1]+1), \
-                    (self.position[0]+1, self.position[1]),\
-                    (self.position[0], self.position[1]-1),\
-                    (self.position[0]-1, self.position[1])]
+        """checks the four neighboring pixels to see if it is blank"""
+        neighbors = [(temp_position[0],temp_position[1]+1), \
+                    (temp_position[0]+1, temp_position[1]),\
+                    (temp_position[0], temp_position[1]-1),\
+                    (temp_position[0]-1, temp_position[1])]
         for temp_neighbor in neighbors:
-            if self.check_position(temp_neighbor):
+            if self.restricted_canvas.is_blank(temp_neighbor):    
                 return True
         return False
 
 
 def generate_position(artist_list):
+    """generates a random start position, making sure not to duplicate"""
     random_position = (random.randint(0,511),random.randint(0,511))
     attempts = 0
     while random_position in map(lambda artist: artist.position, artist_list):
         random_position = (random.randint(0,511),random.randint(0,511))
         attempts += 1
-    if attempts > 1:
-        print random_position, attempts
     return random_position
 
 def generate_color(artist_list):
+    """generates a random color that is unique from the other colors,
+    using a euclidean distance metric to determine uniqueness"""
     random_color = (0, 0, 0)
     
     def color_too_similar(random_color, artist_list, threshold):
-        
+
         def find_euclid_distance(color_1, color_2):
             euclid_sum = 0
             for index, color_value1 in enumerate(color_1):
                 euclid_sum += ((color_value1 - color_2[index])**2)
             return euclid_sum**(0.5)
-
+        
+        if find_euclid_distance(random_color, (255,255,255)) < threshold:
+            return True # makes sure the color isnt too close to white
         for artist in artist_list:
             dist = find_euclid_distance(random_color, artist.color)
             if dist < threshold:
@@ -188,6 +204,7 @@ def generate_color(artist_list):
 
 
 def generate_artists(number_of_artists, number_of_steps):
+    """returns a list of artists with random start positions and colors"""
     artist_list = list()
     for i in range (number_of_artists):
         artist_list.append(\

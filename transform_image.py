@@ -1,10 +1,9 @@
 # Scott Jacobson
 # 9/17/14
 # COMP50 Concurrant Programming
-# 5 hours
 
 """transform_image.py, a program that takes in an image and performs 
-    one of four transforms using one specified threading"""
+    one of four transforms using specified threading"""
 
 # The following synchronization is required among the threads:
 # Every thread has to finish its processing before the
@@ -43,17 +42,16 @@ def transform_pixels(pix_map, row_limits, col_limits, function_to_use):
         for row in range(col_limits[0], col_limits[1]):
             pix_map[col,row] = function_to_use (pix_map[col,row])
 
-def threaded_transform(image_to_transform, rows_to_use, columns_to_use, function_to_use):
+def threaded_transform(image_to_transform, rows, columns, function_to_use):
     """takes in the full pix map, divides it into threads based on 
         rows and columns given, and calls transform on that thread"""
     pix_map = image_to_transform.load()
     width, height = image_to_transform.size
-    width_per_block = width/rows_to_use + (0 if width%rows_to_use == 0 else 1)
-    height_per_block = height/columns_to_use + \
-                                        (0 if width%columns_to_use == 0 else 1)
+    width_per_block = width/rows + (0 if width%rows == 0 else 1)
+    height_per_block = height/columns + (0 if width%columns == 0 else 1)
     all_threads = list()
-    for row_block in range(rows_to_use):
-        for col_block in range (columns_to_use):
+    for row_block in range(rows):
+        for col_block in range (columns):
             min_row = row_block * width_per_block
             max_row = (row_block + 1) * width_per_block
             if max_row > width:
@@ -62,7 +60,6 @@ def threaded_transform(image_to_transform, rows_to_use, columns_to_use, function
             max_col = (col_block + 1) * height_per_block
             if max_col > height:
                 max_col = height
-            print (min_row, max_row), (min_col,max_col)
             all_threads.append(threading.Thread(target=transform_pixels, \
                 args=(pix_map, (min_row, max_row), \
                     (min_col,max_col), function_to_use)))
@@ -86,8 +83,8 @@ def main(argv):
     transform_functions = dict([('switch-r-b', switch_r_b), \
                                  ('grayscale', grayscale), \
                                  ('invert', invert)])
-    rows_to_use = args.rows
-    columns_to_use = args.columns
+    rows = args.rows
+    columns = args.columns
     number_of_threads = args.rows * args.columns
     if number_of_threads > MAX_THREADS:
         print>>sys.stderr,"ERROR: Thread count {0} is greater than max of {1}"\
@@ -107,7 +104,8 @@ def main(argv):
                                             .format(image_to_transform.mode)
         exit(4)
 
-    final_image = threaded_transform(image_to_transform, rows_to_use, columns_to_use, function_to_use)
+    final_image = threaded_transform(image_to_transform, rows, \
+                                        columns, function_to_use)
 
     final_image.show()
     final_image.save(args.output_name)
