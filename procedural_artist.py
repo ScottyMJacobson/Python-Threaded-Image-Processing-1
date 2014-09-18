@@ -5,9 +5,6 @@
 """procedural_artist.py, a program that spawns threads that paint randomly 
     on a canvas"""
 
-# The following synchronization is required among the threads:
-# TODO: THIS
-
 # -*- coding: utf-8 -*-
 #! /usr/local/bin/python
 
