@@ -11,8 +11,9 @@
 # -*- coding: utf-8 -*-
 #! /usr/local/bin/python
 
-import argparse
 import sys
+import argparse
+import random
 import threading
 from PIL import Image
 
@@ -61,15 +62,48 @@ class Artist:
         while self.steps_taken < self.max_steps:
             self.steps_taken += 1
 
+def generate_color(artist_list):
+    random_color = (0, 0, 0)
+    
+    def color_too_similar(random_color, artist_list):
+        
+        def find_euclid_distance(color_1, color_2):
+            euclid_sum = 0
+            for color_value1, color_value2 in color_1, color_2:
+                euclid_sum += ((color_value1 - color_value2)**2)
+            return euclid_sum**(0.5)
+        
+        for artist in artist_list:
+            if find_euclid_distance(random_color, artist.color) < .2:
+                return True
+        return False
+
+    while color_too_similar (random_color, artist_list):
+        random_color = \
+        (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+
+    return random_color
+
+
+def generate_artists(number_of_artists, number_of_steps):
+    artist_list = list()
+    for i in range (number_of_artists):
+        artist_list.append(\
+                    Artist(i, generate_color(artist_list), number_of_steps)\
+                          )
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("number_of_threads", type=int)
     parser.add_argument("number_of_steps", type=int)
 
+    args = parser.parse_args()
+
     canvas = Image.new('RGB', (512,512), color=(255,255,255))
     canvas_map = canvas.load()
     restricted_canvas = RestrictedPixelMap(canvas_map, canvas.size)
+
+    artist_list = generate_artists(args.number_of_threads,args.number_of_steps)
 
     restricted_canvas.draw_to_pixel((255,1,1), 10, 10)
     restricted_canvas.draw_to_pixel((255,1,1), 11, 11)
