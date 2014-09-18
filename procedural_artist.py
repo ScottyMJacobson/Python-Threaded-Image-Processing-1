@@ -31,7 +31,6 @@ def paint(index):
 class RestrictedPixelMap:
     def __init__(self, pix_map, (width, height)):
         self.pix_map = pix_map
-        print type(pix_map)
         self.width = width
         self.height = height
         self.lock_map = [[threading.Lock()]*width for i in range(height)]
@@ -51,10 +50,11 @@ class RestrictedPixelMap:
         return success
 
 class Artist:
-    def __init__(self, index, color, max_steps):
+    def __init__(self, index, color, start_position, max_steps):
         self.index=index
         self.color=color
         self.max_steps=max_steps
+        self.start_position = start_position
         self.steps_taken = 0
         self.pixels_i_own = 0
 
@@ -62,26 +62,42 @@ class Artist:
         while self.steps_taken < self.max_steps:
             self.steps_taken += 1
 
+def generate_position(artist_list):
+    random_position = (random.randint(0,512),random.randint(0,512))
+    attempts = 0
+    while random_position in map(lambda artist: artist.start_position, artist_list):
+        random_position = (random.randint(0,512),random.randint(0,512))
+        attempts += 1
+    if attempts > 1:
+        print random_position, attempts
+    return random_position
+
 def generate_color(artist_list):
     random_color = (0, 0, 0)
     
-    def color_too_similar(random_color, artist_list):
+    def color_too_similar(random_color, artist_list, threshold):
         
         def find_euclid_distance(color_1, color_2):
             euclid_sum = 0
-            for color_value1, color_value2 in color_1, color_2:
-                euclid_sum += ((color_value1 - color_value2)**2)
+            for index, color_value1 in enumerate(color_1):
+                euclid_sum += ((color_value1 - color_2[index])**2)
             return euclid_sum**(0.5)
-        
+
         for artist in artist_list:
-            if find_euclid_distance(random_color, artist.color) < .2:
+            dist = find_euclid_distance(random_color, artist.color)
+            if dist < threshold:
                 return True
         return False
 
-    while color_too_similar (random_color, artist_list):
+    color_tries = 0
+    while color_too_similar (random_color, artist_list, threshold=50.):
         random_color = \
         (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+        color_tries+= 1
+        if color_tries > 10:
+            break
 
+#    print random_color, color_tries
     return random_color
 
 
@@ -89,8 +105,8 @@ def generate_artists(number_of_artists, number_of_steps):
     artist_list = list()
     for i in range (number_of_artists):
         artist_list.append(\
-                    Artist(i, generate_color(artist_list), number_of_steps)\
-                          )
+                    Artist(i, generate_color(artist_list), \
+                        generate_position(artist_list), number_of_steps))
 
 def main():
     parser = argparse.ArgumentParser()
@@ -105,10 +121,16 @@ def main():
 
     artist_list = generate_artists(args.number_of_threads,args.number_of_steps)
 
-    restricted_canvas.draw_to_pixel((255,1,1), 10, 10)
-    restricted_canvas.draw_to_pixel((255,1,1), 11, 11)
-    restricted_canvas.draw_to_pixel((255,1,1), 12, 12)
-    
+    red_thread = threading.Thread(target=restricted_canvas.draw_to_pixel,\
+                                args=((255,1,1), 10, 10))
+    blue_thread = threading.Thread(target=restricted_canvas.draw_to_pixel,\
+                                args=((1,1,255), 10, 10))
+
+    red_thread.start()
+    blue_thread.start()
+    red_thread.join()
+    blue_thread.join()
+
     canvas.show()
 
 if __name__ == '__main__':
